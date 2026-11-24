@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales report pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f4fa;--surface:#fff;--ink:#1d1f3a;--muted:#5b5f86;--line:#dcdef0;--brand:#2b2d6e;--brand-ink:#fff;--accent:#ff6b57;--ok:#17703f;--ok-bg:#dcf3e5;--bad:#b3261e;--bad-bg:#fbe3e1;--run:#1f4e8c;--run-bg:#dde9f7;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12132b;--surface:#1b1d3d;--ink:#e8e9fb;--muted:#9ea2d1;--line:#32355f;--brand:#8c92ff;--brand-ink:#12132b;--accent:#ff8f7f;--ok:#6fd49a;--ok-bg:#16382a;--bad:#ff8a80;--bad-bg:#3d1b19;--run:#8db8ee;--run-bg:#1b2f48;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{background:var(--brand);color:var(--brand-ink);padding:22px 24px}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:0}
+h1{margin:0;font-size:22px;letter-spacing:-.01em}
+header p{margin:2px 0 0;opacity:.8;font-size:14px}
+button{font:inherit;cursor:pointer}
+#run{background:var(--accent);color:#1d1f3a;border:0;border-radius:8px;padding:10px 18px;font-weight:700}
+#run:disabled{opacity:.65;cursor:progress}
+main{padding:22px 0 48px}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card h2{margin:0;padding:14px 18px;font-size:15px;border-bottom:1px solid var(--line)}
+#report{width:100%;height:760px;border:0;background:#fff;display:block}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}.empty b{display:block;color:var(--ink);margin-bottom:4px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}
+.stats div{padding:14px 18px}.stats b{display:block;font-size:20px}.stats span{font-size:13px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:13px;color:var(--muted);font-weight:600}
+tr:last-child td{border:0}.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.pill.success{background:var(--ok-bg);color:var(--ok)}.pill.failed{background:var(--bad-bg);color:var(--bad)}.pill.running{background:var(--run-bg);color:var(--run)}
+.note{padding:12px 18px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1>Sales report pipeline</h1><p>Fetch, clean, load and summarise orders on a schedule.</p></div>
+  <button id="run">Run pipeline now</button>
+</div></header>
+<main class="wrap">
+  <div class="grid">
+    <section class="card"><h2>Latest report</h2><div id="report-box"><div class="empty"><b>No report yet</b>Run the pipeline to create the first one.</div></div></section>
+    <section class="card"><h2>Recent runs</h2><div class="stats" id="stats"></div><div id="runs"></div><div class="note" id="mail-note"></div></section>
+  </div>
+</main>
+<div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.id);toast.id=setTimeout(()=>t.classList.remove('show'),2600)}
+const fmt=iso=>iso?new Date(iso).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'—';
+
+async function loadReport(){
+  const r=await fetch('/api/report/latest');
+  if(!r.ok){return}
+  const html=await r.text();
+  $('#report-box').innerHTML='<iframe id="report" title="Latest sales report" sandbox></iframe>';
+  $('#report').srcdoc=html;
+}
+async function loadRuns(){
+  const d=await (await fetch('/api/runs')).json();
+  const ok=d.runs.filter(r=>r.status==='success');
+  const last=ok[0];
+  $('#stats').innerHTML=`<div><b>${d.runs.length?esc(d.runs[0].status):'—'}</b><span>Last run</span></div><div><b>${last?last.duration_s+' s':'—'}</b><span>Duration</span></div><div><b>${last?last.rows_loaded:'—'}</b><span>Rows loaded</span></div>`;
+  $('#runs').innerHTML=d.runs.length?`<table><thead><tr><th>Started</th><th>Status</th><th>Source</th><th class="num">Rows</th></tr></thead><tbody>${d.runs.map(r=>`<tr title="${esc(r.error||'')}"><td>${fmt(r.started_at)}</td><td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td><td>${esc(r.source||'—')}</td><td class="num">${r.rows_loaded??'—'}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><b>Nothing has run yet</b>Use “Run pipeline now”.</div>';
+  $('#mail-note').textContent=d.email_enabled?'Each run also emails the report.':'Email is off. Set SMTP_HOST and REPORT_TO to send each report by email.';
+}
+$('#run').onclick=async()=>{
+  const b=$('#run');b.disabled=true;b.textContent='Running…';
+  try{
+    const headers={};const tok=sessionStorage.getItem('run_token');if(tok)headers['X-Run-Token']=tok;
+    let r=await fetch('/api/run',{method:'POST',headers});
+    if(r.status===401){const t=prompt('Enter the run token');if(t){sessionStorage.setItem('run_token',t);r=await fetch('/api/run',{method:'POST',headers:{'X-Run-Token':t}})}}
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'Run failed');
+    toast(d.status==='success'?`Done: ${d.rows} rows in ${d.duration_s} s`:'Run failed: '+d.error);
+  }catch(e){toast(e.message)}
+  b.disabled=false;b.textContent='Run pipeline now';
+  loadRuns();loadReport();
+};
+loadRuns();loadReport();
+</script>
+</body>
+</html>
