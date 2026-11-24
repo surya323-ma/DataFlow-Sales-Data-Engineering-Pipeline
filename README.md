@@ -1,4 +1,4 @@
-# Sales Report & Data Pipeline
+# DataFlow – Sales Data Engineering Pipeline
 
 Automated ETL pipeline: **fetch** product data from an API and orders from a CSV, **clean** them with Pandas, **load** them into a SQL database, then **email a scheduled summary report**. A small dashboard shows run history and the latest report.
 
