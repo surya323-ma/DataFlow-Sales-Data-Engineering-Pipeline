@@ -1,0 +1,2 @@
+# Run every day at 07:30 on a server or VM (edit the path first).
+30 7 * * * cd /opt/report-pipeline && /opt/report-pipeline/.venv/bin/python -m pipeline.run >> /var/log/report-pipeline.log 2>&1

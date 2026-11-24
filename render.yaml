@@ -1,0 +1,40 @@
+databases:
+  - name: pipeline-db
+    plan: free
+    databaseName: pipeline
+
+services:
+  # Dashboard: shows run history and the latest report, with a "Run now" button.
+  - type: web
+    name: report-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn web.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: DATABASE_URL
+        fromDatabase: {name: pipeline-db, property: connectionString}
+      - key: RUN_TOKEN
+        sync: false
+
+  # Scheduled job: runs the pipeline every day at 02:00 UTC. Render cron jobs are a paid
+  # instance type, so check current pricing. The dashboard button works without it.
+  - type: cron
+    name: report-daily
+    runtime: python
+    plan: starter
+    schedule: "0 2 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m pipeline.run
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: DATABASE_URL
+        fromDatabase: {name: pipeline-db, property: connectionString}
+      - {key: SMTP_HOST, sync: false}
+      - {key: SMTP_USER, sync: false}
+      - {key: SMTP_PASSWORD, sync: false}
+      - {key: REPORT_TO, sync: false}
